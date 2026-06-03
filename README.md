@@ -134,6 +134,10 @@ curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
 | **Testing** | Non-existent | 80+ Pytest Suite (Coverage for LLM Mocks, Schemas, Auth) |
 | **Database** | Missing critical indexes | Created indexes for `status` and `created_at` polling |
 
+## Architecture Diagram
+
+![InsightLog Architecture](Diagrams/architecture-diagram.png)
+
 ---
 
 ## 🚧 Current Limitations
