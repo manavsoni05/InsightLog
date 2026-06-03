@@ -1,4 +1,4 @@
-# InsightLog (v2)
+# InsightLog (v3)
 
 ![InsightLog Architecture Diagram](https://via.placeholder.com/1200x600.png?text=InsightLog+Architecture+Diagram)
 
@@ -77,53 +77,88 @@ Interactive Swagger docs are available at `http://127.0.0.1:8000/docs`.
 
 ## 🧪 Real-world Sample Test Cases (Curl)
 
-You can test the system locally using these `curl` commands:
+*Note: V3 implements strict timestamp validation. Replace the `datetime` values below with a timestamp within 5 minutes of your current time, or the API will reject it!*
 
-### 1. LOW Severity (Security)
+### 1. INFO Level (Ignored/Filtered)
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
   -H "X-API-Key: insightlog-dev-secret-changeme" \
   -H "Content-Type: application/json" \
-  -d '{"message": "INFO: Admin user manav@example.com successfully changed their password from IP 192.168.1.50."}'
+  -d '{
+    "datetime": "2026-06-03T18:00:00",
+    "log_level": "INFO",
+    "message": "Admin user successfully changed their password."
+  }'
 ```
+*(Returns 202 Accepted - Short-circuits the LLM and database to save costs since it is just INFO)*
 
-### 2. MEDIUM Severity (Application)
+### 2. WARNING Level (Security/Application)
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
   -H "X-API-Key: insightlog-dev-secret-changeme" \
   -H "Content-Type: application/json" \
-  -d '{"message": "WARN: Memory usage spiked to 85% in the image processing microservice during batch upload."}'
+  -d '{
+    "datetime": "2026-06-03T18:05:00",
+    "log_level": "WARNING",
+    "message": "Multiple failed login attempts detected from single IP address",
+    "details": {"ip": "192.168.1.50"}
+  }'
 ```
+*(Processed by LLM and saved to DB, but does NOT trigger a Slack alert)*
 
-### 3. HIGH / CRITICAL Severity (Database Outage)
+### 3. ERROR / FATAL Level (Database Outage)
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
   -H "X-API-Key: insightlog-dev-secret-changeme" \
   -H "Content-Type: application/json" \
-  -d '{"message": "FATAL: Postgres replica sync failed. Write-ahead log corruption detected. Halting all database transactions immediately to prevent data loss."}'
+  -d '{
+    "datetime": "2026-06-03T18:10:00",
+    "log_level": "FATAL",
+    "message": "Postgres replica sync failed. Write-ahead log corruption detected.",
+    "error": "DataCorruptionError: WAL segment missing",
+    "details": {"region": "us-east-1"}
+  }'
 ```
+*(Processed by LLM and Triggers a Richly Formatted Slack Alert)*
 
-### 4. Invalid Payload (Semantic Validation Failure)
+### 4. Invalid Payload (Future Timestamp Rejection)
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
   -H "X-API-Key: insightlog-dev-secret-changeme" \
   -H "Content-Type: application/json" \
-  -d '{"message": "123 !@# %%%"}'
+  -d '{
+    "datetime": "2099-01-01T00:00:00",
+    "log_level": "ERROR",
+    "message": "This log is from the future"
+  }'
 ```
-*(Returns 422 Unprocessable Entity - log rejected as junk data)*
+*(Returns 422 Unprocessable Entity - clock skew validation failure)*
 
 ### 5. Authentication Failure
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/v1/logs" \
   -H "X-API-Key: WRONG_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"message": "Test log message"}'
+  -d '{
+    "datetime": "2026-06-03T18:00:00",
+    "log_level": "ERROR",
+    "message": "Test log message"
+  }'
 ```
 *(Returns 401 Unauthorized)*
 
 ---
 
-## ✨ Improvements over V1
+## ✨ Improvements in V3 (Production Pipeline)
+
+| Feature | V2 | V3 (Current) |
+|---------|----|----|
+| **Input Schema** | Unstructured `message` string | Structured `datetime`, `log_level`, `message`, `error`, `details` |
+| **Noise Filtering** | Processed all logs | Edge-layer short-circuiting for `DEBUG`/`INFO` (No DB, No LLM) |
+| **Slack Alerts** | Alerted on all incidents | Smart Routing: Alerts ONLY on `ERROR` and `FATAL` logs |
+| **Alert Formatting** | Basic text | Rich UI (Icons, visual dividers, parsed bullet point lists) |
+| **Data Validation** | Basic string checks | Strict time validation (±5 min clock skew limit, 7-day past bounds) |
+| **LLM Context** | Sent only the message | Sends the entire rich JSON payload to Gemini for better context |
 
 | Feature | V1 | V2 |
 |---------|----|----|
