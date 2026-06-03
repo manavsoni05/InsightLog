@@ -57,6 +57,7 @@ class IncidentLog(Base):
         SAEnum(StatusEnum),
         nullable=False,
         default=StatusEnum.RECEIVED,
+        index=True,
     )
     severity: str | None = Column(SAEnum(SeverityEnum), nullable=True)
     category: str | None = Column(SAEnum(CategoryEnum), nullable=True)
@@ -67,4 +68,5 @@ class IncidentLog(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
+        index=True,
     )

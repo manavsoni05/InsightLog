@@ -89,20 +89,25 @@ class LogCreate(BaseModel):
 
     message: str = Field(
         ...,
-        min_length=1,
-        max_length=10_000,
+        min_length=10,
+        max_length=5000,
         description=(
             "The raw log message to be triaged. "
-            "Must be between 1 and 10 000 characters."
+            "Must be between 10 and 5000 characters."
         ),
     )
 
     @field_validator("message")
     @classmethod
-    def message_must_not_be_blank(cls, value: str) -> str:
-        """Reject messages that are only whitespace after stripping."""
-        if not value.strip():
+    def validate_message_content(cls, value: str) -> str:
+        """Reject messages that are blank, purely numeric, or too short."""
+        stripped = value.strip()
+        if not stripped:
             raise ValueError("message must not be blank or whitespace-only")
+        if stripped.isdigit():
+            raise ValueError("message must not be purely numeric")
+        if len(stripped.split()) < 3:
+            raise ValueError("message must contain at least 3 words to be meaningful")
         return value
 
 

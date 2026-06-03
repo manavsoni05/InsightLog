@@ -22,7 +22,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.database.session import SessionLocal
 from app.models.incident import IncidentLog, StatusEnum
 from app.schemas.log import TriageResult
-from app.services import llm_service, alert_service
+from app.integrations import llm_service, alert_service
+from app.middleware.request_id import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +58,16 @@ def _apply_triage_result(
     incident.status = StatusEnum.COMPLETED
     db.commit()
     logger.info(
-        "Incident %s triage completed: severity=%s category=%s",
+        "\n✅ [TRIAGE COMPLETED] Incident ID: %s\n"
+        "  - Severity: %s\n"
+        "  - Category: %s\n"
+        "  - Root Cause: %s\n"
+        "  - Remediation: %s\n" + "-"*60,
         incident.id,
         result.severity.value,
         result.category.value,
+        result.root_cause,
+        result.remediation,
     )
 
 
@@ -98,7 +105,14 @@ def process_triage(incident_id: str) -> None:
     Args:
         incident_id: UUID of the IncidentLog row to process.
     """
-    logger.info("Background triage started for incident_id=%s", incident_id)
+    request_id = get_request_id()
+
+    logger.info(
+        "\n" + "="*60 +
+        "\n🚀 [TRIAGE STARTED] Incident ID: %s | Request ID: %s\n" +
+        "="*60,
+        incident_id, request_id
+    )
 
     db: Session = SessionLocal()
     try:
@@ -121,13 +135,14 @@ def process_triage(incident_id: str) -> None:
 
         # Step 5: Slack notification for CRITICAL incidents (failure isolated)
         try:
-            alert_service.send_slack_alert(incident_id, result)
+            alert_service.send_slack_alert(incident_id, result, request_id)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Unexpected error in alert service for incident %s", incident_id)
 
     except Exception as exc:  # noqa: BLE001  (intentional broad catch for background task)
         logger.exception(
-            "Triage failed for incident_id=%s: %s", incident_id, exc
+            "\n❌ [TRIAGE FAILED] Incident ID: %s\nReason: %s\n" + "="*60, 
+            incident_id, exc
         )
         try:
             _mark_failed(db, incident, exc)  # type: ignore[possibly-undefined]
@@ -137,6 +152,4 @@ def process_triage(incident_id: str) -> None:
             )
     finally:
         db.close()
-        logger.info(
-            "Background triage finished for incident_id=%s", incident_id
-        )
+        logger.info("🏁 [TRIAGE FINISHED] Incident ID: %s", incident_id)

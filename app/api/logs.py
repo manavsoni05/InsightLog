@@ -20,13 +20,16 @@ Design rules followed:
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.models.incident import IncidentLog
 from app.schemas.log import IncidentResponse, LogCreate, LogReceiptResponse
 from app.services import log_service, triage_service
+from app.utils.validation import is_valid_log
+from app.core.security import verify_api_key
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +50,13 @@ router = APIRouter(
         "and does NOT block this response."
     ),
 )
+@limiter.limit("30/minute")
 def ingest_log(
+    request: Request,
     payload: LogCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
 ) -> LogReceiptResponse:
     """
     POST /api/v1/logs
@@ -60,6 +66,15 @@ def ingest_log(
     3. Return receipt_id immediately (before triage starts).
     """
     try:
+        # --- Layer 2: Semantic validation ---
+        is_valid, reason = is_valid_log(payload.message)
+        if not is_valid:
+            logger.warning("Log rejected by semantic validation: %s", reason)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Semantic validation failed: {reason}",
+            )
+
         incident = log_service.create_incident_log(db=db, message=payload.message)
     except RuntimeError as exc:
         logger.error("Log ingestion failed: %s", exc)
@@ -73,7 +88,7 @@ def ingest_log(
     # because that session will be closed before the background task runs.
     background_tasks.add_task(triage_service.process_triage, incident.id)
 
-    logger.info("Log ingested, background triage queued for incident_id=%s", incident.id)
+    logger.info("⏳ [QUEUED] Background triage queued for Incident ID: %s", incident.id)
     return LogReceiptResponse(receipt_id=incident.id)
 
 
@@ -90,6 +105,7 @@ def ingest_log(
 def get_incident(
     receipt_id: str,
     db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
 ) -> IncidentResponse:
     """
     GET /api/v1/logs/{receipt_id}

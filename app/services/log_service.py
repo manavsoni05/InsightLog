@@ -54,5 +54,10 @@ def create_incident_log(db: Session, message: str) -> IncidentLog:
         logger.error("Failed to persist incident log: %s", exc, exc_info=True)
         raise RuntimeError("Could not save the incident log.") from exc
 
-    logger.info("Incident log created: id=%s status=%s", incident.id, incident.status)
+    logger.info(
+        "📥 [INPUT] Incident log created | ID: %s | Status: %s | Message snippet: %s...", 
+        incident.id, 
+        incident.status.name, 
+        message[:60].replace("\n", " ")
+    )
     return incident

@@ -23,7 +23,7 @@ from app.schemas.log import Severity, TriageResult
 logger = logging.getLogger(__name__)
 
 
-def send_slack_alert(incident_id: str, result: TriageResult) -> None:
+def send_slack_alert(incident_id: str, result: TriageResult, request_id: str | None = None) -> None:
     """
     Send a Slack webhook notification if the incident is CRITICAL.
 
@@ -43,10 +43,12 @@ def send_slack_alert(incident_id: str, result: TriageResult) -> None:
         )
         return
 
+    req_id_text = f"*Request ID:* `{request_id}`\n" if request_id and request_id != "no-request-id" else ""
     payload = {
         "text": (
             f"🚨 *CRITICAL Incident Detected* 🚨\n\n"
             f"*ID:* `{incident_id}`\n"
+            f"{req_id_text}"
             f"*Category:* {result.category.value}\n\n"
             f"*Root Cause:*\n{result.root_cause}\n\n"
             f"*Remediation:*\n{result.remediation}"
