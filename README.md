@@ -1,6 +1,6 @@
 # InsightLog (v3)
 
-![InsightLog Architecture Diagram](https://via.placeholder.com/1200x600.png?text=InsightLog+Architecture+Diagram)
+![InsightLog Architecture Diagram](Diagrams/architecture-diagram.png)
 
 **InsightLog** is a fast, asynchronous, AI-powered AIOps microservice built for modern SRE teams. It ingests raw application and system logs, intelligently categorizes them using Google Gemini, extracts root causes and remediation steps, and automatically alerts your team on Slack for critical issues.
 
